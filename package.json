@@ -1,0 +1,25 @@
+{
+  "name": "metamath-pickaxe",
+  "version": "0.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webpack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xanxys/metamath-pickaxe.git"
+  },
+  "keywords": [],
+  "author": "xyx",
+  "license": "BSD-3-Clause",
+  "devDependencies": {
+    "copy-webpack-plugin": "^11.0.0",
+    "html-webpack-plugin": "^5.5.1",
+    "ts-loader": "^9.4.2",
+    "typescript": "^5.0.4",
+    "webpack": "^5.82.0",
+    "webpack-cli": "^5.1.0"
+  }
+}

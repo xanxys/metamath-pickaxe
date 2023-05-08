@@ -1,0 +1,1 @@
+(()=>{"use strict";var n=CodeMirror(document.body,{lineNumbers:!0});fetch("/demo0.mm").then((function(n){return n.text()})).then((function(t){n.setValue(t),function(n){var t=function(n){for(var t=[],e=1,r=0,o=n.split(/\r?\n/);r<o.length;r++){for(var u=0,i=o[r].split(/\s+/);u<i.length;u++){var l=i[u];l.length>0&&t.push({token:l,line:e})}e+=1}return t}(n);console.log(t)}(t)}))})();
