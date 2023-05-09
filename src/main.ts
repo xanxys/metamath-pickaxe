@@ -77,7 +77,8 @@ type PStmt = {
     label: string,
     typecode: string,
     symbols: string[],
-    proof: any,
+    proofLabels: string[],
+    proofCompressed: string | null,
     declLine: number,
 };
 
@@ -126,6 +127,22 @@ function parseSymbol(revTokens: Token[]): string {
     const tok = revTokens.pop();
     if (!tok || tok.text.startsWith("$")) {
         throw new ParseError(tok!.line, `Unexpected token ${tok?.text}, expected symbol`);
+    }
+    return tok.text;
+}
+
+function parseLabel(revTokens: Token[]): string {
+    const tok = revTokens.pop();
+    if (!tok || !/^[-._A-Za-z0-9]+$/.test(tok!.text)) {
+        throw new ParseError(tok!.line, `Expected label, found ${tok!.text}`);
+    }
+    return tok.text;
+}
+
+function parseCompressedProofFragment(revTokens: Token[]): string {
+    const tok = revTokens.pop();
+    if (!tok || !/^[A-Z]+$/.test(tok!.text)) {
+        throw new ParseError(tok!.line, `Expected compressed proof, found "${tok!.text}"`);
     }
     return tok.text;
 }
@@ -265,7 +282,8 @@ function parsePStmt(revTokens: Token[]): PStmt {
         label: tokLabel!.text,
         typecode: tokTypecode!.text,
         symbols: [],
-        proof: [],
+        proofLabels: [],
+        proofCompressed: null,
         declLine: tokLabel!.line,
     };
 
@@ -280,13 +298,42 @@ function parsePStmt(revTokens: Token[]): PStmt {
     }
     // TODO: $= ? $.case
 
-    while (true) {
-        const token = revTokens[revTokens.length - 1];
-        if (token.text === "$.") {
-            revTokens.pop();
-            break;
-        } else {
-            stmt.proof.push(parseSymbol(revTokens));
+    const token = revTokens[revTokens.length - 1];
+    if (token.text === "(") {
+        // compressed proof
+        revTokens.pop();
+
+        while (true) {
+            const token = revTokens[revTokens.length - 1];
+            if (token.text === ")") {
+                revTokens.pop();
+                break;
+            } else {
+                stmt.proofLabels.push(parseLabel(revTokens));
+            }
+        }
+
+        let compressedProof = "";
+        while (true) {
+            const token = revTokens[revTokens.length - 1];
+            if (token.text === "$.") {
+                revTokens.pop();
+                break;
+            } else {
+                compressedProof += parseCompressedProofFragment(revTokens);
+            }
+        }
+        stmt.proofCompressed = compressedProof;
+    } else {
+        // non-compressed proof
+        while (true) {
+            const token = revTokens[revTokens.length - 1];
+            if (token.text === "$.") {
+                revTokens.pop();
+                break;
+            } else {
+                stmt.proofLabels.push(parseLabel(revTokens));
+            }
         }
     }
     return stmt;
@@ -379,17 +426,16 @@ function parseEntry(revTokens: Token[]): MMBlockEntry {
 }
 
 function parseMM(text: string): MMBlock {
+    const eofHack = "$end of file$"; // cannot appear as normal token, because this string contains whitespaces
     const tokens = removeOptionals(tokenize(text));
 
-    const revTokens = new Array(...tokens);
-    revTokens.push({ text: "$end of file$", line: tokens[tokens.length - 1].line });
+    const revTokens = Array.from(tokens);
+    revTokens.push({ text: eofHack, line: tokens[tokens.length - 1].line });
     revTokens.reverse();
 
     const entries: MMBlockEntry[] = [];
-    while (revTokens.length > 0 && revTokens[revTokens.length - 1].text !== "$end of file$") {
-        const e = parseEntry(revTokens);
-        console.log(e);
-        entries.push(e);
+    while (revTokens.length > 0 && revTokens[revTokens.length - 1].text !== eofHack) {
+        entries.push(parseEntry(revTokens));
     }
 
     return {
@@ -437,11 +483,11 @@ let codeMirror = CodeMirror(document.body, {
 });
 
 
-//fetch("/demo0.mm") // maxNest 1
-//fetch("/big-unifier.mm") // maxNest 1
-//fetch("/set.mm") // maxNest 5
-//fetch("/iset.mm") // maxNest 4
-fetch("/hol.mm") // maxNest 3
+fetch("/demo0.mm") // maxNest 1
+    //fetch("/big-unifier.mm") // maxNest 1
+    //fetch("/set.mm") // maxNest 5
+    //fetch("/iset.mm") // maxNest 4
+    //fetch("/hol.mm") // maxNest 3
     .then((response) => response.text())
     .then((text) => {
         //        codeMirror.setValue(text);
