@@ -1,4 +1,4 @@
-export type Token = {
+type Token = {
     text: string;
     line: number; // 1-origin
 };
@@ -42,6 +42,7 @@ function removeOptionals(tokens: Token[]): Token[] {
     return result;
 }
 
+// Input data error at tokenizer/parser level.
 export class ParseError {
     line: number;
     message: string;
