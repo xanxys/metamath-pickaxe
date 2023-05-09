@@ -34,6 +34,7 @@ class ASTError {
     }
 }
 
+// throws ASTError.
 function organizeMM(outermostBlock: MMBlock): MMDB {
     const db: MMDB = {
         constSymbols: new Set(),
@@ -58,22 +59,25 @@ function organizeMM(outermostBlock: MMBlock): MMDB {
 
         for (const ent of block.entries) {
             if (ent.entryTy === EntryType.CS) {
-                let stmt = ent.stmt as CStmt;
+                const stmt = ent.stmt as CStmt;
                 if (!outermost) {
                     throw new ASTError(stmt.declLine, "$c can only appear in the outermost block");
                 }
                 stmt.symbols.forEach((s) => db.constSymbols.add(s));
             } else if (ent.entryTy === EntryType.VS) {
-                let stmt = ent.stmt as VStmt;
+                const stmt = ent.stmt as VStmt;
                 stmt.symbols.forEach((s) => db.varSymbols.add(s));
             } else if (ent.entryTy === EntryType.FS) {
-                let stmt = ent.stmt as FStmt;
+                const stmt = ent.stmt as FStmt;
                 currFrame.varHyps.push(stmt);
             } else if (ent.entryTy === EntryType.ES) {
-                let stmt = ent.stmt as EStmt;
+                const stmt = ent.stmt as EStmt;
                 currFrame.logiHyps.push(stmt);
+            } else if (ent.entryTy === EntryType.DS) {
+                const stmt = ent.stmt as DStmt;
+                currFrame.disjoints.push(stmt);
             } else if (ent.entryTy === EntryType.AS) {
-                let stmt = ent.stmt as AStmt;
+                const stmt = ent.stmt as AStmt;
                 currFrame.assertionLabel = stmt.label;
                 currFrame.assertionLine = stmt.declLine;
                 currFrame.assertionTypecode = stmt.typecode;
@@ -94,12 +98,12 @@ function organizeMM(outermostBlock: MMBlock): MMDB {
                     proofCompressed: null,
                 };
             } else if (ent.entryTy === EntryType.PS) {
-                let stmt = ent.stmt as PStmt;
+                const stmt = ent.stmt as PStmt;
                 currFrame.assertionLabel = stmt.label;
                 currFrame.assertionLine = stmt.declLine;
                 currFrame.assertionTypecode = stmt.typecode;
                 currFrame.assertionSymbols = stmt.symbols;
-                
+
                 currFrame.proofLabels = stmt.proofLabels;
                 currFrame.proofCompressed = stmt.proofCompressed;
                 db.extFrames.set(stmt.label, currFrame);
@@ -130,6 +134,15 @@ function organizeMM(outermostBlock: MMBlock): MMDB {
     return db;
 }
 
+// Returns true is the proof is valid.
+function verifyProof(db: MMDB, frame: ExtFrame) : boolean {
+    if (!frame.proofLabels) {
+        throw new Error("frame must contain a proof");
+    }
+
+    return false;
+}
+
 declare const CodeMirror: any;
 
 let codeMirror = CodeMirror(document.body, {
@@ -138,15 +151,19 @@ let codeMirror = CodeMirror(document.body, {
 
 
 fetch("/demo0.mm") // maxNest 1
-    //fetch("/big-unifier.mm") // maxNest 1
-    //fetch("/set.mm") // maxNest 5
+//fetch("/big-unifier.mm") // maxNest 1
+//fetch("/set.mm") // maxNest 5
     //fetch("/iset.mm") // maxNest 4
-    //fetch("/hol.mm") // maxNest 3
+//fetch("/hol.mm") // maxNest 3
     .then((response) => response.text())
     .then((text) => {
         //        codeMirror.setValue(text);
         const ast = parseMM(text);
-        console.log(ast);
-        const frames = organizeMM(ast);
-        console.log(frames);
+        const db = organizeMM(ast);
+        for (const [label, frame] of db.extFrames.entries()) {
+            if (!frame.proofLabels) {
+                continue;
+            }
+            console.log(label, frame, verifyProof(db, frame));
+        }
     });
