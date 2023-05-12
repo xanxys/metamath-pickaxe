@@ -364,5 +364,12 @@ export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
         throw new Error(`Invalid frame, missing ${label}`);
     }
 
+    if (stack.length !== 1) {
+        return `Excess or missing proof steps`;
+    }
+    if (!symSeqEqual(stack[0], [frame.assertionTypecode, ...frame.assertionSymbols])) {
+        return `Proven symbol sequence "${stack[0]}" does not match assertion "${frame.assertionSymbols}"`;
+    }
+
     return true;
 }
