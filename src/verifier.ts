@@ -283,15 +283,10 @@ export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
         const assertion = db.extFrames.get(label);
         if (assertion) {
             const arity = assertion.mandatoryHyps.length;
-            if (arity === 0) {
-                stack.push([assertion.assertionTypecode, ...assertion.assertionSymbols]);
-                continue;
-            }
 
             if (stack.length < arity) {
                 return "Unification failed";
             }
-
             const args: string[][] = [];
             for (let i = 0; i < arity; i++) {
                 args.push(stack.pop() as string[]);
@@ -344,6 +339,7 @@ export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
             }
 
             // Push assertion with unifier.
+            // TODO: verify disjointness is satisfied by unifier.
             const symSeq: string[] = [assertion.assertionTypecode];
             for (const sym of assertion.assertionSymbols) {
                 if (db.varSymbols.has(sym)) {

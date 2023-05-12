@@ -86,3 +86,33 @@ test('verifyProof demo/compressed', () => {
     expect(verifyProof(db, db.extFrames.get("th1")!)).toBe(true);
 });
 
+test('verifyProof disjoint OK', () => {
+    const txt = `
+    $c != term |- $. $v x y $. vx $f term x $. vy $f term y $.
+    \${
+      $d x y $.
+      ax.d $a |- x != y $.
+    \$}
+    \${
+      $d x y $.
+      p.d $p |- y != x $= vy vx ax.d $.
+    \$}
+    `;
+    const db = createMMDB(parseMM(txt));
+    expect(verifyProof(db, db.extFrames.get("p.d")!)).toBe(true);
+});
+
+test('verifyProof disjoint missing', () => {
+    const txt = `
+    $c != term |- $. $v x y $. vx $f term x $. vy $f term y $.
+    \${
+      $d x y $.
+      ax.d $a |- x != y $.
+    \$}
+    \${
+      p.d $p |- y != x $= vy vx ax.d $.
+    \$}
+    `;
+    const db = createMMDB(parseMM(txt));
+    expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
+});
