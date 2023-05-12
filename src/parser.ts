@@ -430,7 +430,7 @@ export function parseMM(text: string): MMBlock {
     const tokens = removeOptionals(tokenize(text));
 
     const revTokens = Array.from(tokens);
-    revTokens.push({ text: eofHack, line: tokens[tokens.length - 1].line });
+    revTokens.push({ text: eofHack, line: tokens[tokens.length - 1]?.line || 1 });
     revTokens.reverse();
 
     const entries: MMBlockEntry[] = [];
@@ -440,7 +440,7 @@ export function parseMM(text: string): MMBlock {
 
     return {
         entries: entries,
-        beginLine: tokens[0].line,
-        endLine: tokens[tokens.length - 1].line,
+        beginLine: tokens[0]?.line || 1,
+        endLine: tokens[tokens.length - 1]?.line || 1,
     };
 }
