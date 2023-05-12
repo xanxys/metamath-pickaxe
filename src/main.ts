@@ -157,7 +157,7 @@ function organizeMM(outermostBlock: MMBlock): MMDB {
 }
 
 
-// Compressed proof is not just compression of label list, it's compression of stack machine operation.
+// Compressed proof is not just compression of label list, it's extension of stack machine operation to allow memory access.
 // read discussion in https://groups.google.com/g/metamath/c/qIHf2h0fxbA
 type ProofStackOp = {
     ty: ProofStackOpType,
@@ -285,7 +285,7 @@ function verifyProof(db: MMDB, frame: ExtFrame): true | string {
         }
 
         const label: string = op.pushLabel as string;
-        var hyp = frame.mandatoryHyps.filter((h) => h.label === label)[0];
+        var hyp = frame.context.hyps.filter((h) => h.label === label)[0];
         if (hyp) {
             console.log("ref-hyp", hyp);
             stack.push([hyp.typecode, ...hyp.symbols]);
@@ -374,7 +374,8 @@ function verifyProof(db: MMDB, frame: ExtFrame): true | string {
             stack.push(symSeq);
             continue;
         }
-
+        
+        console.log(frame);
         throw new Error(`Invalid frame, missing ${label}`);
     }
 
@@ -388,11 +389,12 @@ let codeMirror = CodeMirror(document.body, {
 });
 
 
+
 //fetch("/demo0.mm") // maxNest 1
 //fetch("/big-unifier.mm") // maxNest 1
     //fetch("/set.mm") // maxNest 5
     //fetch("/iset.mm") // maxNest 4
-    fetch("/hol.mm") // maxNest 3
+fetch("/hol.mm") // maxNest 3
     .then((response) => response.text())
     .then((text) => {
         //        codeMirror.setValue(text);
