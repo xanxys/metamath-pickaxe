@@ -156,6 +156,88 @@ function organizeMM(outermostBlock: MMBlock): MMDB {
     return db;
 }
 
+
+// Compressed proof is not just compression of label list, it's compression of stack machine operation.
+// read discussion in https://groups.google.com/g/metamath/c/qIHf2h0fxbA
+type ProofStackOp = {
+    ty: ProofStackOpType,
+    pushLabel: string | undefined,
+    memoryIx: number | undefined,
+};
+
+enum ProofStackOpType {
+    Push,
+    Store,
+    Load,
+};
+
+function decodeNormalProof(labels: string[]): ProofStackOp[] {
+    const result: ProofStackOp[] = [];
+    for (const label of labels) {
+        result.push({
+            ty: ProofStackOpType.Push,
+            pushLabel: label,
+            memoryIx: undefined,
+        });
+    }
+    return result;
+}
+
+function decodeCompressedProof(compressedProof: string, mandatoryHypLabels: string[], optionalLabels: string[]): ProofStackOp[] {
+    const result: ProofStackOp[] = [];
+    let tempNum = 0;
+    let memoryIx = 0;
+    for (let i = 0; i < compressedProof.length; i++) {
+        const n = compressedProof[i].charCodeAt(0) - "A".charCodeAt(0);
+        if (n < 20) {
+            // A-T
+            const num = (tempNum * 20 + n);
+            tempNum = 0;
+
+            if (num < mandatoryHypLabels.length) {
+                result.push({
+                    ty: ProofStackOpType.Push,
+                    pushLabel: mandatoryHypLabels[num],
+                    memoryIx: undefined,
+                });
+            } else if (num < mandatoryHypLabels.length + optionalLabels.length) {
+                result.push({
+                    ty: ProofStackOpType.Push,
+                    pushLabel: optionalLabels[num - mandatoryHypLabels.length],
+                    memoryIx: undefined,
+                });
+            } else {
+                const loadIx = num - mandatoryHypLabels.length - optionalLabels.length;
+                if (loadIx >= memoryIx) {
+                    throw new Error("Invalid compressed proof (referencing undefined subproof)");
+                }
+                result.push({
+                    ty: ProofStackOpType.Load,
+                    pushLabel: undefined,
+                    memoryIx: loadIx,
+                });
+            }
+        } else if (n < 25) {
+            // U-Y
+            tempNum = tempNum * 5 + (n - 20 + 1);
+        } else if (n === 25) {
+            // Z
+            if (tempNum !== 0) {
+                throw new Error("Invalid compressed proof (unexpected Z)");
+            }
+            result.push({
+                ty: ProofStackOpType.Store,
+                pushLabel: undefined,
+                memoryIx: memoryIx,
+            });
+            memoryIx++;
+        } else {
+            throw new Error("Invalid compressed proof");
+        }
+    }
+    return result;
+}
+
 function printStack(stack: string[][]) {
     console.log("====stack", stack.map((syms) => syms.join(" ")));
 }
@@ -172,28 +254,44 @@ function symSeqEqual(symSeqA: string[], symSeqB: string[]): boolean {
     return true;
 }
 
+
+
 // Returns true is the proof is valid, otherwise failure reason string.
 function verifyProof(db: MMDB, frame: ExtFrame): true | string {
     if (!frame.proofLabels) {
         throw new Error("frame must contain a proof");
     }
 
+    let decodedOps: ProofStackOp[] = [];
+    if (!frame.proofCompressed) {
+        decodedOps = decodeNormalProof(frame.proofLabels);
+    } else {
+        decodedOps = decodeCompressedProof(frame.proofCompressed, frame.mandatoryHyps.map((h) => h.label), frame.proofLabels);
+    }
+    console.log(decodedOps);
+
+    const memory: Map<number, string[]> = new Map();
     const stack: string[][] = [];
-    for (const label of frame.proofLabels) {
-        const varHyp = frame.context.varHyps.filter((h) => h.label === label)[0];
+    for (const op of decodedOps) {
         printStack(stack);
-        console.log("applying", label);
-        if (varHyp) {
-            console.log("ref-var-hyp", varHyp);
-            stack.push([varHyp.typecode, varHyp.symbol]);
+        console.log("applying", op);
+        if (op.ty === ProofStackOpType.Store) {
+            memory.set(op.memoryIx as number, stack[stack.length - 1]);
             continue;
         }
-        const logiHyp = frame.context.logiHyps.filter((h) => h.label === label)[0];
-        if (logiHyp) {
-            console.log("ref-logi-hyp", logiHyp);
-            stack.push([logiHyp.typecode, ...logiHyp.symbols]);
+        if (op.ty === ProofStackOpType.Load) {
+            stack.push(memory.get(op.memoryIx as number) as string[]);
             continue;
         }
+
+        const label: string = op.pushLabel as string;
+        var hyp = frame.mandatoryHyps.filter((h) => h.label === label)[0];
+        if (hyp) {
+            console.log("ref-hyp", hyp);
+            stack.push([hyp.typecode, ...hyp.symbols]);
+            continue;
+        }
+
         const assertion = db.extFrames.get(label);
         if (assertion) {
             const arity = assertion.mandatoryHyps.length;
@@ -308,11 +406,14 @@ let codeMirror = CodeMirror(document.body, {
                 continue;
             }
             numCheckedProof++;
+            console.log("=======================================");
+            console.log(frame.assertionLabel);
             const verifResult = verifyProof(db, frame);
             console.log("->", verifResult);
             if (verifResult === true) {
                 numVerifiedProof++;
             }
+            console.log("verification result", numVerifiedProof, "/", numCheckedProof);
         }
-        console.log("verification result", numVerifiedProof, "/", numCheckedProof);
+        
     });
