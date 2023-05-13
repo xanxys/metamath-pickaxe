@@ -1,14 +1,86 @@
 import { DStmt, FStmt, EStmt, MMBlock, EntryType, CStmt, VStmt, AStmt, PStmt } from "./parser";
 
+// Represents variable disjointness data.
+class Disjoints {
+    pairs: Set<string> = new Set<string>(); // "a b", "b c", ...
+
+    constructor() {
+    }
+
+    addPair(a: string, b: string) {
+        if (a < b) {
+            this.pairs.add(`${a} ${b}`);
+        } else {
+            this.pairs.add(`${b} ${a}`);
+        }
+    }
+
+    add(stmt: DStmt) {
+        const syms = stmt.symbols;
+        for (let i = 0; i < syms.length; i++) {
+            for (let j = i + 1; j < syms.length; j++) {
+                this.addPair(syms[i], syms[j]);
+            }
+        }
+    }
+
+    clone(): Disjoints {
+        const result = new Disjoints();
+        result.pairs = new Set(this.pairs);
+        return result;
+    }
+
+    extract(requiredSyms: string[]): Disjoints {
+        const result = new Disjoints();
+        for (const pair of this.pairs) {
+            const [a, b] = pair.split(" ");
+            if (requiredSyms.includes(a) && requiredSyms.includes(b)) {
+                result.pairs.add(pair);
+            }
+        }
+        return result;
+    }
+
+    substituteMultiple(subst: Map<string, string[]>): Disjoints {
+        const result = new Disjoints();
+        for (const pair of this.pairs) {
+            const [a, b] = pair.split(" ");
+            const aelems = subst.get(a);
+            const belems = subst.get(b);
+            if (!aelems || !belems) {
+                throw new Error("Variable not found in substitution map");
+            }
+            for (const aelem of aelems) {
+                for (const belem of belems) {
+                    if (aelem === belem) {
+                        throw new Error(`Variable ${aelem} cannot be disjoint with itself`);
+                    }
+                    result.addPair(aelem, belem);
+                }
+            }
+        }
+        return result;
+    }
+
+    satisfiedBy(other: Disjoints): boolean {
+        for (const rel of this.pairs) {
+            if (!other.pairs.has(rel)) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 export type FrameContext = {
-    disjoints: DStmt[],
+    disjoints: Disjoints,
     hyps: Hypothesis[],
     logiHyps: EStmt[],
 };
 
 export function cloneFrameContext(ctx: FrameContext): FrameContext {
     return {
-        disjoints: Array.from(ctx.disjoints),
+        disjoints: ctx.disjoints.clone(),
         hyps: Array.from(ctx.hyps),
         logiHyps: Array.from(ctx.logiHyps),
     };
@@ -30,6 +102,7 @@ export type ExtFrame = {
     assertionSymbols: string[],
     assertionLine: number,
 
+    mandatoryDisjoints: Disjoints,
     mandatoryHyps: Hypothesis[],
     proofLabels: string[] | null,
     proofCompressed: string | null,
@@ -110,7 +183,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
                 });
             } else if (ent.entryTy === EntryType.DS) {
                 const stmt = ent.stmt as DStmt;
-                currCtx.disjoints.push(stmt);
+                currCtx.disjoints.add(stmt);
             } else if (ent.entryTy === EntryType.AS) {
                 const stmt = ent.stmt as AStmt;
                 db.extFrames.set(stmt.label, {
@@ -119,6 +192,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
                     assertionLine: stmt.declLine,
                     assertionTypecode: stmt.typecode,
                     assertionSymbols: stmt.symbols,
+                    mandatoryDisjoints: currCtx.disjoints.extract(stmt.symbols),
                     mandatoryHyps: filterMandatoryHyps(currCtx.hyps, db, currCtx.logiHyps, stmt.symbols),
                     proofLabels: null,
                     proofCompressed: null,
@@ -131,6 +205,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
                     assertionLine: stmt.declLine,
                     assertionTypecode: stmt.typecode,
                     assertionSymbols: stmt.symbols,
+                    mandatoryDisjoints: currCtx.disjoints.extract(stmt.symbols),
                     mandatoryHyps: filterMandatoryHyps(currCtx.hyps, db, currCtx.logiHyps, stmt.symbols),
                     proofLabels: stmt.proofLabels,
                     proofCompressed: stmt.proofCompressed,
@@ -145,7 +220,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
     }
 
     procBlock(outermostBlock, true, {
-        disjoints: [],
+        disjoints: new Disjoints(),
         hyps: [],
         logiHyps: [],
     });
@@ -246,8 +321,6 @@ function symSeqEqual(symSeqA: string[], symSeqB: string[]): boolean {
     return true;
 }
 
-
-
 // Returns true is the proof is valid, otherwise failure reason string.
 export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
     if (!frame.proofLabels) {
@@ -338,8 +411,22 @@ export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
                 }
             }
 
+            const unifierVarOnly: Map<string, string[]> = new Map();
+            for (const [k, syms] of unifier) {
+                unifierVarOnly.set(k, syms.filter((sym) => db.varSymbols.has(sym)));
+            }
+
+            assertion.mandatoryDisjoints.substituteMultiple(unifierVarOnly)
+
+            const assertionDVInProofVars = assertion.mandatoryDisjoints.substituteMultiple(unifierVarOnly);
+            if (!assertionDVInProofVars.satisfiedBy(frame.context.disjoints)) {
+                // console.log(unifier);
+                // console.log(assertion, frame);
+                // console.log(relevantAssertionDisjoints, frame.context.disjoints);
+                return `Disjointness requirement of referenced assertion ${assertion.assertionLabel} is not satisfied by proof context`;
+            }
+
             // Push assertion with unifier.
-            // TODO: verify disjointness is satisfied by unifier.
             const symSeq: string[] = [assertion.assertionTypecode];
             for (const sym of assertion.assertionSymbols) {
                 if (db.varSymbols.has(sym)) {

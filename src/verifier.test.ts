@@ -1,7 +1,7 @@
 import { parseMM } from './parser';
 import { ExtFrame, MMDB, createMMDB, verifyProof } from './verifier';
 
-test('verifyProof single', () => {
+test('verifyProof OK single', () => {
     const txt = `
     $c wff $.
     $v x $.
@@ -14,7 +14,7 @@ test('verifyProof single', () => {
     expect(verifyProof(db, db.extFrames.get("proof")!)).toBe(true);
 });
 
-test('verifyProof extra step', () => {
+test('verifyProof NG extra step', () => {
     const txt = `
     $c wff $.
     $v x $.
@@ -27,7 +27,7 @@ test('verifyProof extra step', () => {
     expect(verifyProof(db, db.extFrames.get("proof")!)).not.toBe(true);
 });
 
-test('verifyProof demo/normal', () => {
+test('verifyProof OK demo/normal', () => {
     const txt = `
     $c 0 + = -> ( ) term wff |- $.
     $v t r s P Q $.
@@ -58,7 +58,7 @@ test('verifyProof demo/normal', () => {
     expect(verifyProof(db, db.extFrames.get("th1")!)).toBe(true);
 });
 
-test('verifyProof demo/compressed', () => {
+test('verifyProof OK demo/compressed', () => {
     const txt = `
     $c 0 + = -> ( ) term wff |- $.
     $v t r s P Q $.
@@ -86,7 +86,7 @@ test('verifyProof demo/compressed', () => {
     expect(verifyProof(db, db.extFrames.get("th1")!)).toBe(true);
 });
 
-test('verifyProof disjoint OK', () => {
+test('verifyProof OK disjoint', () => {
     const txt = `
     $c != term |- $. $v x y $. vx $f term x $. vy $f term y $.
     \${
@@ -102,7 +102,7 @@ test('verifyProof disjoint OK', () => {
     expect(verifyProof(db, db.extFrames.get("p.d")!)).toBe(true);
 });
 
-test('verifyProof disjoint missing', () => {
+test('verifyProof NG disjoint missing', () => {
     const txt = `
     $c != term |- $. $v x y $. vx $f term x $. vy $f term y $.
     \${
@@ -113,6 +113,57 @@ test('verifyProof disjoint missing', () => {
       p.d $p |- y != x $= vy vx ax.d $.
     \$}
     `;
+    const db = createMMDB(parseMM(txt));
+    expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
+});
+
+test('verifyProof OK disjoint uses post-unification vars', () => {
+    const txt = `
+    $c != term |- $. $v x y a b $. vx $f term x $. vy $f term y $. va $f term a $. vb $f term b $.
+    \${
+      $d x y $.
+      ax.d $a |- x != y $.
+    \$}
+    \${
+      $d a b $.
+      p.d $p |- a != b $= va vb ax.d $.
+    \$}
+    `;
+    const db = createMMDB(parseMM(txt));
+    expect(verifyProof(db, db.extFrames.get("p.d")!)).toBe(true);
+});
+
+test('verifyProof NG disjoint missing', () => {
+    const txt = `
+    $c != term |- $. $v x y a b $. vx $f term x $. vy $f term y $. va $f term a $. vb $f term b $.
+    \${
+      $d x y $.
+      ax.d $a |- x != y $.
+    \$}
+    \${
+      p.d $p |- a != b $= va vb ax.d $.
+    \$}
+    `;
+    // p.d is missing $d a b $.
+    const db = createMMDB(parseMM(txt));
+    expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
+});
+
+test("verifyProof NG disjoint doesn't use pre-unification vars", () => {
+    const txt = `
+    $c != term |- $. $v x y a b $. vx $f term x $. vy $f term y $. va $f term a $. vb $f term b $.
+    \${
+      $d x y $.
+      ax.d $a |- x != y $.
+    \$}
+    \${
+      $d x y $.
+      p.d $p |- a != b $= va vb ax.d $.
+    \$}
+    `;
+    // p.d has $d x y $. Incorrect verifier would pass ax.d application, as $d x y $ is required by ax.d
+    // and it is satisfied by the $d x y $. included in p.d's frame.
+    // However, correct verifier must check DV condition AFTER unification of variables.
     const db = createMMDB(parseMM(txt));
     expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
 });
