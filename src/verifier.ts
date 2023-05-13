@@ -91,15 +91,15 @@ class SimpleUnifier {
     }
 
     // Constrain this unification to satisfy: this.apply(from) === to
-    addConstraint(from: string[], to: string[]) {
+    addConstraint(from: string[], to: string[]) : true | string {
         for (const fromSym of from) {
             // const case
             if (!this.vars.has(fromSym)) {
                 if (to.length === 0) {
-                    return `Unification failed: could not match symbol "${fromSym}" (const) to empty sequence`;
+                    return `could not match symbol "${fromSym}" (const) to empty sequence`;
                 }
                 if (to[0] !== fromSym) {
-                    return `Unification failed: could not match symbol "${fromSym}" (const) to "${to[0]}" (const)`;
+                    return `could not match symbol "${fromSym}" (const) to "${to[0]}" (const)`;
                 }
                 // ok
                 to = to.slice(1);
@@ -110,7 +110,7 @@ class SimpleUnifier {
             const unif = this.unifier.get(fromSym);
             if (unif !== undefined) {
                 if (!symSeqEqual(unif, to.slice(0, unif.length))) {
-                    return `Unification failed: for" ${fromSym}" (var), contradictinon found 1. ${unif} 2. ${to.slice(0, unif.length)}`;
+                    return `for" ${fromSym}" (var), contradictinon found 1. ${unif} 2. ${to.slice(0, unif.length)}`;
                 }
                 // ok
                 to = to.slice(unif.length);
@@ -119,7 +119,12 @@ class SimpleUnifier {
 
             // var case (not unified yet) : greedy match
             this.unifier.set(fromSym, to);
+            to = [];
         }
+        if (to.length > 0) {
+            return `could not match empty sequence to "${to}"`;
+        }
+        return true;
     }
 
     // Replaces each variable in symSeq to symbol sequences, that satisfies all previous addConstraint() calls.
@@ -191,7 +196,10 @@ export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
             const unifier = new SimpleUnifier(db.varSymbols);
             for (let i = 0; i < arity; i++) {
                 const hyp = assertion.mandatoryHyps[i];
-                unifier.addConstraint([hyp.typecode, ...hyp.symbols], args[i]);
+                const res = unifier.addConstraint([hyp.typecode, ...hyp.symbols], args[i]);
+                if (res !== true) {
+                    return `Unification failed: ${res}`;
+                }
             }
             if (!unifier.applyToDvr(assertion.mandatoryDvr).satisfiedBy(frame.context.dvr)) {
                 return `Disjointness requirement of referenced assertion ${assertion.assertionLabel} is not satisfied by proof context`;
