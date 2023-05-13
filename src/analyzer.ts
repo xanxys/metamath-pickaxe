@@ -1,7 +1,7 @@
 import { DStmt, FStmt, EStmt, MMBlock, EntryType, CStmt, VStmt, AStmt, PStmt } from "./parser";
 
 // Represents variable disjointness restriction.
-class DVRestriction {
+export class DVRestriction {
     pairs: Set<string> = new Set<string>(); // "a b", "b c", ...
 
     constructor() {
@@ -105,7 +105,7 @@ export type ExtFrame = {
     mandatoryDvr: DVRestriction,
     mandatoryHyps: Hypothesis[],
     proofLabels: string[] | null,
-    proofCompressed: string | null,
+    proofCompressed: (number | "Z")[] | null,
 };
 
 // See p.132 of metamath.pdf
@@ -141,6 +141,32 @@ function filterMandatoryHyps(hyps: Hypothesis[], db: MMDB, logiHyps: EStmt[], as
         }
     }
     return hyps.filter((hyp) => hyp.isLogi || usedVars.has(hyp.symbols[0]));
+}
+
+function parseCompressedProof(compressedProof: string, line: number): (number | "Z")[] {
+    const result: (number | "Z")[] = [];
+    let tempNum = 0;
+    for (let i = 0; i < compressedProof.length; i++) {
+        const n = compressedProof[i].charCodeAt(0) - "A".charCodeAt(0);
+        if (n < 20) {
+            // A-T
+            const num = (tempNum * 20 + n);
+            tempNum = 0;
+            result.push(num);
+        } else if (n < 25) {
+            // U-Y
+            tempNum = tempNum * 5 + (n - 20 + 1);
+        } else if (n === 25) {
+            // Z
+            if (tempNum !== 0) {
+                throw new ASTError(line, "Invalid compressed proof (unexpected Z)");
+            }
+            result.push("Z");
+        } else {
+            throw new Error(`Unexpected character ${compressedProof[i]} in compressed proof`);
+        }
+    }
+    return result;
 }
 
 // throws ASTError.
@@ -248,7 +274,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
                     mandatoryDvr: currCtx.dvr.extract(stmt.symbols),
                     mandatoryHyps: filterMandatoryHyps(currCtx.hyps, db, currCtx.logiHyps, stmt.symbols),
                     proofLabels: stmt.proofLabels,
-                    proofCompressed: stmt.proofCompressed,
+                    proofCompressed: stmt.proofCompressed === null ? null : parseCompressedProof(stmt.proofCompressed, stmt.declLine),
                 });
             } else if (ent.entryTy === EntryType.Block) {
                 procBlock(ent.block as MMBlock, false, currCtx);

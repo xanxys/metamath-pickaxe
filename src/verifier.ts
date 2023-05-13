@@ -26,17 +26,19 @@ function decodeNormalProof(labels: string[]): ProofStackOp[] {
     return result;
 }
 
-function decodeCompressedProof(compressedProof: string, mandatoryHypLabels: string[], optionalLabels: string[]): ProofStackOp[] {
+function decodeCompressedProof(compressedProof: (number | "Z")[], mandatoryHypLabels: string[], optionalLabels: string[]): ProofStackOp[] {
     const result: ProofStackOp[] = [];
-    let tempNum = 0;
     let memoryIx = 0;
-    for (let i = 0; i < compressedProof.length; i++) {
-        const n = compressedProof[i].charCodeAt(0) - "A".charCodeAt(0);
-        if (n < 20) {
-            // A-T
-            const num = (tempNum * 20 + n);
-            tempNum = 0;
-
+    for (const rawOp of compressedProof) {
+        if (rawOp === "Z") {
+            result.push({
+                ty: ProofStackOpType.Store,
+                pushLabel: undefined,
+                memoryIx: memoryIx,
+            });
+            memoryIx++;
+        } else {
+            const num = rawOp;
             if (num < mandatoryHypLabels.length) {
                 result.push({
                     ty: ProofStackOpType.Push,
@@ -60,22 +62,6 @@ function decodeCompressedProof(compressedProof: string, mandatoryHypLabels: stri
                     memoryIx: loadIx,
                 });
             }
-        } else if (n < 25) {
-            // U-Y
-            tempNum = tempNum * 5 + (n - 20 + 1);
-        } else if (n === 25) {
-            // Z
-            if (tempNum !== 0) {
-                throw new Error("Invalid compressed proof (unexpected Z)");
-            }
-            result.push({
-                ty: ProofStackOpType.Store,
-                pushLabel: undefined,
-                memoryIx: memoryIx,
-            });
-            memoryIx++;
-        } else {
-            throw new Error("Invalid compressed proof");
         }
     }
     return result;
