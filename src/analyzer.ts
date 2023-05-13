@@ -111,7 +111,7 @@ export type ExtFrame = {
 // See p.132 of metamath.pdf
 export type MMDB = {
     constSymbols: Set<string>,
-    varSymbols: Set<String>,
+    varSymbols: Set<string>,
     extFrames: Map<string, ExtFrame>, // key is label
 };
 

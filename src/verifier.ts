@@ -1,4 +1,4 @@
-import { MMDB, ExtFrame } from "./analyzer";
+import { MMDB, ExtFrame, DVRestriction } from "./analyzer";
 
 // Compressed proof is not just compression of label list, it's extension of stack machine operation to allow memory access.
 // read discussion in https://groups.google.com/g/metamath/c/qIHf2h0fxbA
@@ -79,6 +79,75 @@ function symSeqEqual(symSeqA: string[], symSeqB: string[]): boolean {
     return true;
 }
 
+// Very simple unifier that only processes contraints from front-to-back, in greedy matching. (no backtracking)
+// Metamath proof semantics is designed such that this kind of unifier always works.
+class SimpleUnifier {
+    unifier: Map<string, string[]> = new Map();  // key: variable, value: symbol sequence (value can be empty seq)
+    vars: Set<string>;
+
+    // vars are target of unification. All other symbols are considered constants.
+    constructor(vars: Set<string>) {
+        this.vars = vars;
+    }
+
+    // Constrain this unification to satisfy: this.apply(from) === to
+    addConstraint(from: string[], to: string[]) {
+        for (const fromSym of from) {
+            // const case
+            if (!this.vars.has(fromSym)) {
+                if (to.length === 0) {
+                    return `Unification failed: could not match symbol "${fromSym}" (const) to empty sequence`;
+                }
+                if (to[0] !== fromSym) {
+                    return `Unification failed: could not match symbol "${fromSym}" (const) to "${to[0]}" (const)`;
+                }
+                // ok
+                to = to.slice(1);
+                continue;
+            }
+
+            // var case (already unified)
+            const unif = this.unifier.get(fromSym);
+            if (unif !== undefined) {
+                if (!symSeqEqual(unif, to.slice(0, unif.length))) {
+                    return `Unification failed: for" ${fromSym}" (var), contradictinon found 1. ${unif} 2. ${to.slice(0, unif.length)}`;
+                }
+                // ok
+                to = to.slice(unif.length);
+                continue;
+            }
+
+            // var case (not unified yet) : greedy match
+            this.unifier.set(fromSym, to);
+        }
+    }
+
+    // Replaces each variable in symSeq to symbol sequences, that satisfies all previous addConstraint() calls.
+    apply(symSeq: string[]): string[] {
+        const result: string[] = [];
+        for (const sym of symSeq) {
+            if (this.vars.has(sym)) {
+                const u = this.unifier.get(sym);
+                if (u === undefined) {
+                    throw new Error(`Unification failed for ${sym}. Probably caller's bug.`);
+                }
+                result.push(...u);
+            } else {
+                result.push(sym);
+            }
+        }
+        return result;
+    }
+
+    applyToDvr(dvr: DVRestriction): DVRestriction {
+        const unifierVarOnly: Map<string, string[]> = new Map();
+        for (const [k, syms] of this.unifier) {
+            unifierVarOnly.set(k, syms.filter((sym) => this.vars.has(sym)));
+        }
+        return dvr.substituteMultiple(unifierVarOnly);
+    }
+}
+
 // Returns true is the proof is valid, otherwise failure reason string.
 export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
     if (!frame.proofLabels) {
@@ -114,99 +183,28 @@ export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
         const assertion = db.extFrames.get(label);
         if (assertion) {
             const arity = assertion.mandatoryHyps.length;
-
             if (stack.length < arity) {
-                return "Unification failed";
+                return `Assertion "${assertion.assertionLabel}" requires ${arity} arguments, but only ${stack.length} arguments are available in proof stack.`;
             }
-            const args: string[][] = [];
+            const args = stack.splice(-arity, arity);
+
+            const unifier = new SimpleUnifier(db.varSymbols);
             for (let i = 0; i < arity; i++) {
-                args.push(stack.pop() as string[]);
+                const hyp = assertion.mandatoryHyps[i];
+                unifier.addConstraint([hyp.typecode, ...hyp.symbols], args[i]);
             }
-            args.reverse();
-
-            const hyps = assertion.mandatoryHyps;
-            const unifier = new Map<string, string[]>(); // key:variable, value:symbolSeq
-            for (let i = 0; i < arity; i++) {
-                // TODO: currently doing 1:1 matching, but actually variable can match sequence of symbols+, not just 1 symbol.
-                // since vHyp is [typecode, var], it's trivial to find match.
-                // What about logi hyp...????
-                if (args[i].length < 1 + hyps[i].symbols.length) {
-                    // TODO: is it ok to match var to 0 symbols?
-                    return `Unification failed for hyp(1 typecode + ${hyps[i].symbols.length} symbols) -> ${args[i]}`;
-                }
-                if (args[i][0] !== hyps[i].typecode) {
-                    return `Unification failed: typecode mismatch`;
-                }
-                const newUnification = args[i].slice(1);
-                if (hyps[i].symbols.length === 1) {
-                    const existingUnification = unifier.get(hyps[i].symbols[0]);
-                    if (existingUnification !== undefined && !symSeqEqual(existingUnification, newUnification)) {
-                        return `Unification failed: already assigned unifier ${existingUnification} contradicts newly required unification ${newUnification}`;
-                    }
-                    unifier.set(hyps[i].symbols[0], newUnification);
-                } else {
-                    // "easy" case: everything is already unified.
-                    const matchTrial: string[] = [hyps[i].typecode];
-
-                    hyps[i].symbols.forEach((sym) => {
-                        if (db.varSymbols.has(sym)) {
-                            const existingUnif = unifier.get(sym);
-                            if (existingUnif === undefined) {
-                                throw new Error("Needs generic seq->seq unification, but not implemented");
-                            }
-                            matchTrial.push(...existingUnif);
-                        } else {
-                            matchTrial.push(sym);
-                        }
-                    });
-
-                    if (symSeqEqual(matchTrial, args[i])) {
-                        continue;
-                    } else {
-                        console.log(matchTrial, "!=", args[i]);
-                        return "Unification failed";
-                    }
-                }
-            }
-
-            const unifierVarOnly: Map<string, string[]> = new Map();
-            for (const [k, syms] of unifier) {
-                unifierVarOnly.set(k, syms.filter((sym) => db.varSymbols.has(sym)));
-            }
-
-            assertion.mandatoryDvr.substituteMultiple(unifierVarOnly)
-
-            const assertionDVInProofVars = assertion.mandatoryDvr.substituteMultiple(unifierVarOnly);
-            if (!assertionDVInProofVars.satisfiedBy(frame.context.dvr)) {
-                // console.log(unifier);
-                // console.log(assertion, frame);
-                // console.log(relevantAssertionDisjoints, frame.context.disjoints);
+            if (!unifier.applyToDvr(assertion.mandatoryDvr).satisfiedBy(frame.context.dvr)) {
                 return `Disjointness requirement of referenced assertion ${assertion.assertionLabel} is not satisfied by proof context`;
             }
-
-            // Push assertion with unifier.
-            const symSeq: string[] = [assertion.assertionTypecode];
-            for (const sym of assertion.assertionSymbols) {
-                if (db.varSymbols.has(sym)) {
-                    const unifiedSyms = unifier.get(sym);
-                    if (unifiedSyms === undefined) {
-                        return `Somehow unifier misses symbol contained in the assertion ${sym}`; // probably bug in the code, not proof
-                    }
-                    symSeq.push(...unifiedSyms);
-                } else {
-                    symSeq.push(sym);
-                }
-            }
-            stack.push(symSeq);
+            stack.push(unifier.apply([assertion.assertionTypecode, ...assertion.assertionSymbols]));
             continue;
         }
 
-        console.log(frame);
-        throw new Error(`Invalid frame, missing ${label}`);
+        throw new Error(`Invalid frame, missing ${label}`);  // analyzer should prevent this from happening.
     }
 
     if (stack.length !== 1) {
-        return `Excess or missing proof steps`;
+        return `Excess or missing proof steps; stack size is ${stack.length} (must be 1)`;
     }
     if (!symSeqEqual(stack[0], [frame.assertionTypecode, ...frame.assertionSymbols])) {
         return `Proven symbol sequence "${stack[0]}" does not match assertion "${frame.assertionSymbols}"`;
