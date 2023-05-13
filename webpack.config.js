@@ -23,11 +23,6 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       template: "src/index.html"
-    }),
-    new CopyWebpackPlugin({
-      patterns: [
-        { from: '*.mm', to: './' }
-      ]
     })
   ]
 };

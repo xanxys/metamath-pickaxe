@@ -8,11 +8,17 @@ let codeMirror = CodeMirror(document.body, {
     lineNumbers: true,
 });
 
-//fetch("/demo0.mm")
-//fetch("/big-unifier.mm")
-//fetch("/set.mm")
-//fetch("/iset.mm")
-fetch("/hol.mm")
+
+//"demo0.mm"
+//"set.mm"
+//"iset.mm"
+//"hol.mm"
+//"miu.mm"
+//"nf.mm"
+//"peano.mm"
+//"ql.mm"
+//"big-unifier.mm"
+fetch("https://raw.githubusercontent.com/metamath/set.mm/master/hol.mm")
     .then((response) => response.text())
     .then((text) => {
         //        codeMirror.setValue(text);
