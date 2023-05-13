@@ -1,8 +1,8 @@
 import { parseMM } from './parser';
-import { ExtFrame, MMDB, createMMDB, verifyProof } from './verifier';
+import { ExtFrame, MMDB, ASTError, createMMDB, verifyProof } from './verifier';
 
 test('verifyProof OK single', () => {
-    const txt = `
+  const txt = `
     $c wff $.
     $v x $.
     wx $f wff x $.
@@ -10,12 +10,12 @@ test('verifyProof OK single', () => {
     proof $p wff x $= wx $.
     `;
 
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("proof")!)).toBe(true);
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("proof")!)).toBe(true);
 });
 
 test('verifyProof NG extra step', () => {
-    const txt = `
+  const txt = `
     $c wff $.
     $v x $.
     wx $f wff x $.
@@ -23,12 +23,12 @@ test('verifyProof NG extra step', () => {
     proof $p wff x $= wx wx $.
     `;
 
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("proof")!)).not.toBe(true);
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("proof")!)).not.toBe(true);
 });
 
 test('verifyProof OK demo/normal', () => {
-    const txt = `
+  const txt = `
     $c 0 + = -> ( ) term wff |- $.
     $v t r s P Q $.
     tt $f term t $.
@@ -54,12 +54,12 @@ test('verifyProof OK demo/normal', () => {
        tt tze tpl tt tt a1 mp mp
      $.
     `;
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("th1")!)).toBe(true);
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("th1")!)).toBe(true);
 });
 
 test('verifyProof OK demo/compressed', () => {
-    const txt = `
+  const txt = `
     $c 0 + = -> ( ) term wff |- $.
     $v t r s P Q $.
     tt $f term t $.
@@ -82,12 +82,12 @@ test('verifyProof OK demo/compressed', () => {
     th1 $p |- t = t $=
       ( tze tpl weq a2 wim a1 mp ) ABCZADZAADZAEZJJKFLIAAGHH $.
     `;
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("th1")!)).toBe(true);
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("th1")!)).toBe(true);
 });
 
 test('verifyProof OK disjoint', () => {
-    const txt = `
+  const txt = `
     $c != term |- $. $v x y $. vx $f term x $. vy $f term y $.
     \${
       $d x y $.
@@ -98,12 +98,12 @@ test('verifyProof OK disjoint', () => {
       p.d $p |- y != x $= vy vx ax.d $.
     \$}
     `;
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("p.d")!)).toBe(true);
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("p.d")!)).toBe(true);
 });
 
 test('verifyProof NG disjoint missing', () => {
-    const txt = `
+  const txt = `
     $c != term |- $. $v x y $. vx $f term x $. vy $f term y $.
     \${
       $d x y $.
@@ -113,12 +113,12 @@ test('verifyProof NG disjoint missing', () => {
       p.d $p |- y != x $= vy vx ax.d $.
     \$}
     `;
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
 });
 
 test('verifyProof OK disjoint uses post-unification vars', () => {
-    const txt = `
+  const txt = `
     $c != term |- $. $v x y a b $. vx $f term x $. vy $f term y $. va $f term a $. vb $f term b $.
     \${
       $d x y $.
@@ -129,12 +129,12 @@ test('verifyProof OK disjoint uses post-unification vars', () => {
       p.d $p |- a != b $= va vb ax.d $.
     \$}
     `;
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("p.d")!)).toBe(true);
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("p.d")!)).toBe(true);
 });
 
 test('verifyProof NG disjoint missing', () => {
-    const txt = `
+  const txt = `
     $c != term |- $. $v x y a b $. vx $f term x $. vy $f term y $. va $f term a $. vb $f term b $.
     \${
       $d x y $.
@@ -144,13 +144,13 @@ test('verifyProof NG disjoint missing', () => {
       p.d $p |- a != b $= va vb ax.d $.
     \$}
     `;
-    // p.d is missing $d a b $.
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
+  // p.d is missing $d a b $.
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
 });
 
 test("verifyProof NG disjoint doesn't use pre-unification vars", () => {
-    const txt = `
+  const txt = `
     $c != term |- $. $v x y a b $. vx $f term x $. vy $f term y $. va $f term a $. vb $f term b $.
     \${
       $d x y $.
@@ -161,9 +161,63 @@ test("verifyProof NG disjoint doesn't use pre-unification vars", () => {
       p.d $p |- a != b $= va vb ax.d $.
     \$}
     `;
-    // p.d has $d x y $. Incorrect verifier would pass ax.d application, as $d x y $ is required by ax.d
-    // and it is satisfied by the $d x y $. included in p.d's frame.
-    // However, correct verifier must check DV condition AFTER unification of variables.
-    const db = createMMDB(parseMM(txt));
-    expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
+  // p.d has $d x y $. Incorrect verifier would pass ax.d application, as $d x y $ is required by ax.d
+  // and it is satisfied by the $d x y $. included in p.d's frame.
+  // However, correct verifier must check DV condition AFTER unification of variables.
+  const db = createMMDB(parseMM(txt));
+  expect(verifyProof(db, db.extFrames.get("p.d")!)).not.toBe(true);
+});
+
+test("createMMDB NG double def $c", () => {
+  const txt = `
+    $c a $.
+    $c a $.
+    `;
+  expect(() => createMMDB(parseMM(txt))).toThrow(ASTError);
+});
+
+test("createMMDB NG double def $v", () => {
+  const txt = `
+    $v a $.
+    $v a $.
+    `;
+  expect(() => createMMDB(parseMM(txt))).toThrow(ASTError);
+});
+
+test("createMMDB NG overlapping $c & $v", () => {
+  const txt = `
+    $c a $.
+    $v a $.
+    `;
+  expect(() => createMMDB(parseMM(txt))).toThrow(ASTError);
+});
+
+test("createMMDB OK $f", () => {
+  const txt = `
+    $c a $.
+    $v b $.
+    w $f a b $.
+    `;
+  const db = createMMDB(parseMM(txt));
+  expect(db.constSymbols).toContain("a");
+  expect(db.varSymbols).toContain("b");
+  expect(db.extFrames.size).toBe(0);
+});
+
+test("createMMDB NG $f typecode is var", () => {
+  const txt = `
+    $c a $.
+    $v b c $.
+    w $f b c $.
+    `;
+  expect(() => createMMDB(parseMM(txt))).toThrow(ASTError);
+});
+
+test("createMMDB NG $f var is const", () => {
+  const txt = `
+    $c a b $.
+    $v c $.
+    w $f a b $.
+    `;
+  expect(() => createMMDB(parseMM(txt))).toThrow(ASTError);
 });

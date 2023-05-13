@@ -1,7 +1,7 @@
 import { DStmt, FStmt, EStmt, MMBlock, EntryType, CStmt, VStmt, AStmt, PStmt } from "./parser";
 
-// Represents variable disjointness data.
-class Disjoints {
+// Represents variable disjointness restriction.
+class DVRestriction {
     pairs: Set<string> = new Set<string>(); // "a b", "b c", ...
 
     constructor() {
@@ -24,14 +24,14 @@ class Disjoints {
         }
     }
 
-    clone(): Disjoints {
-        const result = new Disjoints();
+    clone(): DVRestriction {
+        const result = new DVRestriction();
         result.pairs = new Set(this.pairs);
         return result;
     }
 
-    extract(requiredSyms: string[]): Disjoints {
-        const result = new Disjoints();
+    extract(requiredSyms: string[]): DVRestriction {
+        const result = new DVRestriction();
         for (const pair of this.pairs) {
             const [a, b] = pair.split(" ");
             if (requiredSyms.includes(a) && requiredSyms.includes(b)) {
@@ -41,8 +41,8 @@ class Disjoints {
         return result;
     }
 
-    substituteMultiple(subst: Map<string, string[]>): Disjoints {
-        const result = new Disjoints();
+    substituteMultiple(subst: Map<string, string[]>): DVRestriction {
+        const result = new DVRestriction();
         for (const pair of this.pairs) {
             const [a, b] = pair.split(" ");
             const aelems = subst.get(a);
@@ -62,7 +62,7 @@ class Disjoints {
         return result;
     }
 
-    satisfiedBy(other: Disjoints): boolean {
+    satisfiedBy(other: DVRestriction): boolean {
         for (const rel of this.pairs) {
             if (!other.pairs.has(rel)) {
                 return false;
@@ -73,14 +73,14 @@ class Disjoints {
 }
 
 export type FrameContext = {
-    disjoints: Disjoints,
+    dvr: DVRestriction,
     hyps: Hypothesis[],
     logiHyps: EStmt[],
 };
 
 export function cloneFrameContext(ctx: FrameContext): FrameContext {
     return {
-        disjoints: ctx.disjoints.clone(),
+        dvr: ctx.dvr.clone(),
         hyps: Array.from(ctx.hyps),
         logiHyps: Array.from(ctx.logiHyps),
     };
@@ -102,7 +102,7 @@ export type ExtFrame = {
     assertionSymbols: string[],
     assertionLine: number,
 
-    mandatoryDisjoints: Disjoints,
+    mandatoryDvr: DVRestriction,
     mandatoryHyps: Hypothesis[],
     proofLabels: string[] | null,
     proofCompressed: string | null,
@@ -160,12 +160,28 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
                 if (!outermost) {
                     throw new ASTError(stmt.declLine, "$c can only appear in the outermost block");
                 }
-                stmt.symbols.forEach((s) => db.constSymbols.add(s));
+                stmt.symbols.forEach((s) => {
+                    if (db.constSymbols.has(s) || db.varSymbols.has(s)) {
+                        throw new ASTError(stmt.declLine, `"${s}" is already declared and cannot be re-declared`);
+                    }
+                    db.constSymbols.add(s);
+                });
             } else if (ent.entryTy === EntryType.VS) {
                 const stmt = ent.stmt as VStmt;
-                stmt.symbols.forEach((s) => db.varSymbols.add(s));
+                stmt.symbols.forEach((s) => {
+                    if (db.constSymbols.has(s) || db.varSymbols.has(s)) {
+                        throw new ASTError(stmt.declLine, `"${s}" is already declared and cannot be re-declared`);
+                    }
+                    db.varSymbols.add(s);
+                });
             } else if (ent.entryTy === EntryType.FS) {
                 const stmt = ent.stmt as FStmt;
+                if (!db.constSymbols.has(stmt.typecode)) {
+                    throw new ASTError(stmt.declLine, `"${stmt.typecode}" must be a constant symbol, but it was not.`);
+                }
+                if (!db.varSymbols.has(stmt.symbol)) {
+                    throw new ASTError(stmt.declLine, `"${stmt.symbol}" must be a constant symbol, but it was not.`);
+                }
                 currCtx.hyps.push({
                     label: stmt.label,
                     typecode: stmt.typecode,
@@ -183,7 +199,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
                 });
             } else if (ent.entryTy === EntryType.DS) {
                 const stmt = ent.stmt as DStmt;
-                currCtx.disjoints.add(stmt);
+                currCtx.dvr.add(stmt);
             } else if (ent.entryTy === EntryType.AS) {
                 const stmt = ent.stmt as AStmt;
                 db.extFrames.set(stmt.label, {
@@ -192,7 +208,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
                     assertionLine: stmt.declLine,
                     assertionTypecode: stmt.typecode,
                     assertionSymbols: stmt.symbols,
-                    mandatoryDisjoints: currCtx.disjoints.extract(stmt.symbols),
+                    mandatoryDvr: currCtx.dvr.extract(stmt.symbols),
                     mandatoryHyps: filterMandatoryHyps(currCtx.hyps, db, currCtx.logiHyps, stmt.symbols),
                     proofLabels: null,
                     proofCompressed: null,
@@ -205,7 +221,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
                     assertionLine: stmt.declLine,
                     assertionTypecode: stmt.typecode,
                     assertionSymbols: stmt.symbols,
-                    mandatoryDisjoints: currCtx.disjoints.extract(stmt.symbols),
+                    mandatoryDvr: currCtx.dvr.extract(stmt.symbols),
                     mandatoryHyps: filterMandatoryHyps(currCtx.hyps, db, currCtx.logiHyps, stmt.symbols),
                     proofLabels: stmt.proofLabels,
                     proofCompressed: stmt.proofCompressed,
@@ -220,7 +236,7 @@ export function createMMDB(outermostBlock: MMBlock): MMDB {
     }
 
     procBlock(outermostBlock, true, {
-        disjoints: new Disjoints(),
+        dvr: new DVRestriction(),
         hyps: [],
         logiHyps: [],
     });
@@ -416,10 +432,10 @@ export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
                 unifierVarOnly.set(k, syms.filter((sym) => db.varSymbols.has(sym)));
             }
 
-            assertion.mandatoryDisjoints.substituteMultiple(unifierVarOnly)
+            assertion.mandatoryDvr.substituteMultiple(unifierVarOnly)
 
-            const assertionDVInProofVars = assertion.mandatoryDisjoints.substituteMultiple(unifierVarOnly);
-            if (!assertionDVInProofVars.satisfiedBy(frame.context.disjoints)) {
+            const assertionDVInProofVars = assertion.mandatoryDvr.substituteMultiple(unifierVarOnly);
+            if (!assertionDVInProofVars.satisfiedBy(frame.context.dvr)) {
                 // console.log(unifier);
                 // console.log(assertion, frame);
                 // console.log(relevantAssertionDisjoints, frame.context.disjoints);
