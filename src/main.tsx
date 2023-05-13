@@ -1,3 +1,8 @@
+import * as React from 'react';
+import * as ReactDOM from "react-dom/client";
+import Button from '@mui/material/Button';
+
+
 import { parseMM } from "./parser";
 import { createMMDB } from "./analyzer";
 import { verifyProof } from "./verifier";
@@ -8,6 +13,15 @@ let codeMirror = CodeMirror(document.body, {
     lineNumbers: true,
 });
 
+function MyApp() {
+    return <Button variant="contained">Hello World</Button>;
+}
+
+ReactDOM.createRoot(document.querySelector("#app")!).render(
+    <React.StrictMode>
+        <MyApp />
+    </React.StrictMode>
+);
 
 //"demo0.mm"
 //"set.mm"
