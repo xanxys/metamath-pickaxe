@@ -5,7 +5,7 @@ import '@blueprintjs/core/lib/css/blueprint.css';
 import * as React from 'react';
 import { useState } from 'react';
 import * as ReactDOM from "react-dom/client";
-import { Button } from "@blueprintjs/core";
+import { Button, Spinner } from "@blueprintjs/core";
 
 
 import { parseMM } from "./parser";
@@ -20,8 +20,12 @@ let codeMirror = CodeMirror(document.body, {
 
 function MPApp() {
     const [status, setStatus] = useState("DB not loaded");
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleClickLoad = async (filename: string) => {
+        setStatus("loading...");
+        setIsLoading(true);
+
         try {
             const db: MMDB = await loadFromGHAndVerify(filename);
 
@@ -43,8 +47,11 @@ function MPApp() {
                 }
                 console.log("verification result", numVerifiedProof, "/", numCheckedProof);
             }
+
+            setIsLoading(false);
             setStatus(`DB loaded: \n ${numAxioms} axiom ($a) & ${numCheckedProof} proof ($p) loaded \n proof verification: ${numVerifiedProof} of ${numCheckedProof}`);
         } catch (e) {
+            setIsLoading(false);
             setStatus(`DB load error: \n ${JSON.stringify(e)}`);
         }
     };
@@ -71,6 +78,9 @@ function MPApp() {
                 onClick={() => handleClickLoad(filename)}
             />
         )}
+
+        {isLoading ? <Spinner /> : null}
+        
 
         {status}
     </div>;
