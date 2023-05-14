@@ -83,18 +83,18 @@ function symSeqEqual(symSeqA: string[], symSeqB: string[]): boolean {
 // Metamath proof semantics is designed such that this kind of unifier always works.
 class SimpleUnifier {
     unifier: Map<string, string[]> = new Map();  // key: variable, value: symbol sequence (value can be empty seq)
-    vars: Set<string>;
+    consts: Set<string>;
 
-    // vars are target of unification. All other symbols are considered constants.
-    constructor(vars: Set<string>) {
-        this.vars = vars;
+    // consts are consts, and all other symbols are variables (target of unification).
+    constructor(consts: Set<string>) {
+        this.consts = consts;
     }
 
     // Constrain this unification to satisfy: this.apply(from) === to
-    addConstraint(from: string[], to: string[]) : true | string {
+    addConstraint(from: string[], to: string[]): true | string {
         for (const fromSym of from) {
             // const case
-            if (!this.vars.has(fromSym)) {
+            if (this.consts.has(fromSym)) {
                 if (to.length === 0) {
                     return `could not match symbol "${fromSym}" (const) to empty sequence`;
                 }
@@ -131,14 +131,14 @@ class SimpleUnifier {
     apply(symSeq: string[]): string[] {
         const result: string[] = [];
         for (const sym of symSeq) {
-            if (this.vars.has(sym)) {
+            if (this.consts.has(sym)) {
+                result.push(sym);
+            } else {
                 const u = this.unifier.get(sym);
                 if (u === undefined) {
                     throw new Error(`Unification failed for ${sym}. Probably caller's bug.`);
                 }
                 result.push(...u);
-            } else {
-                result.push(sym);
             }
         }
         return result;
@@ -147,7 +147,7 @@ class SimpleUnifier {
     applyToDvr(dvr: DVRestriction): DVRestriction {
         const unifierVarOnly: Map<string, string[]> = new Map();
         for (const [k, syms] of this.unifier) {
-            unifierVarOnly.set(k, syms.filter((sym) => this.vars.has(sym)));
+            unifierVarOnly.set(k, syms.filter((sym) => !this.consts.has(sym)));
         }
         return dvr.substituteMultiple(unifierVarOnly);
     }
@@ -193,7 +193,7 @@ export function verifyProof(db: MMDB, frame: ExtFrame): true | string {
             }
             const args = stack.splice(-arity, arity);
 
-            const unifier = new SimpleUnifier(db.varSymbols);
+            const unifier = new SimpleUnifier(db.constSymbols);
             for (let i = 0; i < arity; i++) {
                 const hyp = assertion.mandatoryHyps[i];
                 const res = unifier.addConstraint([hyp.typecode, ...hyp.symbols], args[i]);

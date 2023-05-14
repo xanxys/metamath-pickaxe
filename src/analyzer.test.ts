@@ -55,6 +55,37 @@ test("createMMDB OK double def $e in different nest", () => {
     expect(() => createMMDB(parseMM(txt))).not.toThrow(ASTError);
 });
 
+test("createMMDB OK double def $v in different nest", () => {
+    const txt = `
+    \${
+      $v a $.
+    \$}
+    \${
+      $v a $.
+    \$}
+    `;
+    expect(() => createMMDB(parseMM(txt))).not.toThrow(ASTError);
+});
+
+test("createMMDB NG double def $v in nest", () => {
+    const txt = `
+    $v a $.
+    \${
+      $v a $.
+    \$}
+    `;
+    expect(() => createMMDB(parseMM(txt))).toThrow(ASTError);
+});
+
+test("createMMDB NG def $c in nest", () => {
+    const txt = `
+    \${
+      $c a $.
+    \$}
+    `;
+    expect(() => createMMDB(parseMM(txt))).toThrow(ASTError);
+});
+
 test("createMMDB OK $f", () => {
     const txt = `
     $c a $.
@@ -63,7 +94,7 @@ test("createMMDB OK $f", () => {
     `;
     const db = createMMDB(parseMM(txt));
     expect(db.constSymbols).toContain("a");
-    expect(db.varSymbols).toContain("b");
+    expect(db.outerContext.varSymbols).toContain("b");
     expect(db.extFrames.size).toBe(0);
 });
 
