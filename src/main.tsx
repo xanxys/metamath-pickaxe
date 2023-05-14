@@ -1,7 +1,11 @@
+import 'normalize.css/normalize.css';
+import '@blueprintjs/icons/lib/css/blueprint-icons.css';
+import '@blueprintjs/core/lib/css/blueprint.css';
+
 import * as React from 'react';
+import { useState } from 'react';
 import * as ReactDOM from "react-dom/client";
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
+import { Button } from "@blueprintjs/core";
 
 
 import { parseMM } from "./parser";
@@ -15,21 +19,20 @@ let codeMirror = CodeMirror(document.body, {
 });
 
 function MPApp() {
+    const [status, setStatus] = useState("DB not loaded");
 
-    const handleClickDemo = () => {
-        loadFromGHAndVerify("demo0.mm");
-    };
-
-    const handleClickHol = () => {
-        loadFromGHAndVerify("hol.mm");
+    const handleClickLoad = async (filename: string) => {
+        const res = await loadFromGHAndVerify(filename);
+        setStatus("DB loaded: " + res);
     };
 
     return <div>
-        <Typography variant="h3" gutterBottom>
-            Open DBs in GitHub
-        </Typography>
-        <Button variant="contained" sx={{ textTransform: 'none' }} onClick={handleClickDemo}>demo0.mm</Button>
-        <Button variant="contained" sx={{ textTransform: 'none' }} onClick={handleClickHol}>hol.mm</Button>
+        <h3 className="bp4-heading">Standard DBs</h3>
+        master branch of https://github.com/metamath/set.mm <br />
+        <Button intent="primary" text="demo0.mm" onClick={() => handleClickLoad("demo0.mm")} />
+        <Button intent="primary" text="hol.mm" onClick={() => handleClickLoad("hol.mm")} />
+
+        {status}
     </div>;
 }
 
@@ -39,7 +42,7 @@ ReactDOM.createRoot(document.querySelector("#app")!).render(
     </React.StrictMode>
 );
 
-function loadFromGHAndVerify(filename: string) {
+async function loadFromGHAndVerify(filename: string): Promise<string> {
     //"demo0.mm"
     //"set.mm"
     //"iset.mm"
@@ -49,7 +52,7 @@ function loadFromGHAndVerify(filename: string) {
     //"peano.mm"
     //"ql.mm"
     //"big-unifier.mm"
-    fetch("https://raw.githubusercontent.com/metamath/set.mm/master/" + filename)
+    return fetch("https://raw.githubusercontent.com/metamath/set.mm/master/" + filename)
         .then((response) => response.text())
         .then((text) => {
             //        codeMirror.setValue(text);
@@ -71,5 +74,6 @@ function loadFromGHAndVerify(filename: string) {
                 }
                 console.log("verification result", numVerifiedProof, "/", numCheckedProof);
             }
+            return `"verification result ${numVerifiedProof} of ${numCheckedProof}`;
         });
 }
