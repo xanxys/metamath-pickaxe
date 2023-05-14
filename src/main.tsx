@@ -9,7 +9,7 @@ import { Button } from "@blueprintjs/core";
 
 
 import { parseMM } from "./parser";
-import { createMMDB } from "./analyzer";
+import { createMMDB, MMDB } from "./analyzer";
 import { verifyProof } from "./verifier";
 
 declare const CodeMirror: any;
@@ -22,46 +22,15 @@ function MPApp() {
     const [status, setStatus] = useState("DB not loaded");
 
     const handleClickLoad = async (filename: string) => {
-        const res = await loadFromGHAndVerify(filename);
-        setStatus("DB loaded: " + res);
-    };
+        try {
+            const db: MMDB = await loadFromGHAndVerify(filename);
 
-    return <div>
-        <h3 className="bp4-heading">Standard DBs</h3>
-        master branch of https://github.com/metamath/set.mm <br />
-        <Button intent="primary" text="demo0.mm" onClick={() => handleClickLoad("demo0.mm")} />
-        <Button intent="primary" text="hol.mm" onClick={() => handleClickLoad("hol.mm")} />
-
-        {status}
-    </div>;
-}
-
-ReactDOM.createRoot(document.querySelector("#app")!).render(
-    <React.StrictMode>
-        <MPApp />
-    </React.StrictMode>
-);
-
-async function loadFromGHAndVerify(filename: string): Promise<string> {
-    //"demo0.mm"
-    //"set.mm"
-    //"iset.mm"
-    //"hol.mm"
-    //"miu.mm"
-    //"nf.mm"
-    //"peano.mm"
-    //"ql.mm"
-    //"big-unifier.mm"
-    return fetch("https://raw.githubusercontent.com/metamath/set.mm/master/" + filename)
-        .then((response) => response.text())
-        .then((text) => {
-            //        codeMirror.setValue(text);
-            const ast = parseMM(text);
-            const db = createMMDB(ast);
+            let numAxioms = 0;
             let numCheckedProof = 0;
             let numVerifiedProof = 0;
             for (const [label, frame] of db.extFrames.entries()) {
                 if (!frame.proofLabels) {
+                    numAxioms++;
                     continue;
                 }
                 numCheckedProof++;
@@ -74,6 +43,52 @@ async function loadFromGHAndVerify(filename: string): Promise<string> {
                 }
                 console.log("verification result", numVerifiedProof, "/", numCheckedProof);
             }
-            return `"verification result ${numVerifiedProof} of ${numCheckedProof}`;
+            setStatus(`DB loaded: \n ${numAxioms} axiom ($a) & ${numCheckedProof} proof ($p) loaded \n proof verification: ${numVerifiedProof} of ${numCheckedProof}`);
+        } catch (e) {
+            setStatus(`DB load error: \n ${JSON.stringify(e)}`);
+        }
+    };
+
+    const filenames = [
+        "demo0.mm",
+        "set.mm",
+        "iset.mm",
+        "hol.mm",
+        "miu.mm",
+        "nf.mm",
+        "peano.mm",
+        "ql.mm",
+        "big-unifier.mm"]
+
+    return <div>
+        <h3 className="bp4-heading">Standard DBs</h3>
+        master branch of https://github.com/metamath/set.mm <br />
+        {filenames.map(filename =>
+            <Button
+                key={filename}
+                intent="primary"
+                text={filename}
+                onClick={() => handleClickLoad(filename)}
+            />
+        )}
+
+        {status}
+    </div>;
+}
+
+ReactDOM.createRoot(document.querySelector("#app")!).render(
+    <React.StrictMode>
+        <MPApp />
+    </React.StrictMode>
+);
+
+async function loadFromGHAndVerify(filename: string): Promise<MMDB> {
+
+    return fetch("https://raw.githubusercontent.com/metamath/set.mm/master/" + filename)
+        .then((response) => response.text())
+        .then((text) => {
+            const ast = parseMM(text);
+            const db = createMMDB(ast);
+            return db;
         });
 }
