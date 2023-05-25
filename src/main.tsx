@@ -5,7 +5,7 @@ import '@blueprintjs/core/lib/css/blueprint.css';
 import * as React from 'react';
 import { useState } from 'react';
 import * as ReactDOM from "react-dom/client";
-import { Button, Spinner } from "@blueprintjs/core";
+import { Button, Spinner, Card, Elevation, Alert } from "@blueprintjs/core";
 
 
 import { parseMM } from "./parser";
@@ -14,20 +14,72 @@ import { verifyProof } from "./verifier";
 
 declare const CodeMirror: any;
 
+/*
 let codeMirror = CodeMirror(document.body, {
     lineNumbers: true,
 });
+*/
+
+function MPTopMode(props: any) {
+    return <div>
+        <h2>Pickaxe</h2>
+        <div className="bp4-text-large">
+            <p>Metamath is ...</p>
+            <p>Pickaxe is ...</p>
+        </div>
+        <div className="bp4-text-muted">
+            all data is saved in your browser locally.
+        </div>
+
+        <Card interactive={false} elevation={Elevation.ONE}>
+            <h2>set.mm</h2>
+            <p>ZFC axioms & theorems<br />
+                largest metamath DB</p>
+            <Button intent="primary" onClick={() => props.selectDb("set.mm")}>Start</Button>
+        </Card>
+
+        <Card interactive={false} elevation={Elevation.ONE}>
+            <h2>demo0.mm</h2>
+            <p>Tutorial DB with a few toy axioms</p>
+            <Button intent="primary" onClick={() => props.selectDb("demo0.mm")}>Start</Button>
+        </Card>
+
+        <Card interactive={false} elevation={Elevation.ONE}>
+            <h2>Others</h2>
+            <p>Less-common axionms and local DB files</p>
+            <Button>Start</Button>
+        </Card>
+    </div>;
+}
+
+function MPDbMode(props: any) {
+    const [dbName, setDbName] = useState("set.mm");
+    return <div>
+        <h3 onClick={props.onClickBack}>Pickaxe | {dbName} </h3>
+        {props.dbSummary.text}
+    </div>
+}
 
 function MPApp() {
-    const [status, setStatus] = useState("DB not loaded");
     const [isLoading, setIsLoading] = useState(false);
+    const [isModeTop, setIsModeTop] = useState(true);
+    const [isModeDb, setIsModeDb] = useState(false);
+    const [dbSummary, setDbSummary] = useState({});
+    const [errorStatus, setErrorStatus] = useState("");
 
-    const handleClickLoad = async (filename: string) => {
-        setStatus("loading...");
+    const handleBack = () => {
+        setIsLoading(false);
+        setIsModeTop(true);
+        setIsModeDb(false);
+    };
+
+    const handleSelectDb = async (dbName: string) => {
+        console.log("Opening", dbName);
+        setIsModeTop(false);
         setIsLoading(true);
 
         try {
-            const db: MMDB = await loadFromGHAndVerify(filename);
+            const db: MMDB = await loadFromGHAndVerify(dbName);
 
             let numAxioms = 0;
             let numCheckedProof = 0;
@@ -49,41 +101,50 @@ function MPApp() {
             }
 
             setIsLoading(false);
-            setStatus(`DB loaded: \n ${numAxioms} axiom ($a) & ${numCheckedProof} proof ($p) loaded \n proof verification: ${numVerifiedProof} of ${numCheckedProof}`);
+            setIsModeDb(true);
+            setDbSummary({
+                text: `${numAxioms} axiom ($a) & ${numCheckedProof} proof ($p) loaded \n proof verification: ${numVerifiedProof} of ${numCheckedProof}`
+            });
         } catch (e) {
             setIsLoading(false);
-            setStatus(`DB load error: \n ${JSON.stringify(e)}`);
+            setIsModeTop(true);
+            setErrorStatus(JSON.stringify(e));
         }
     };
 
-    const filenames = [
-        "demo0.mm",
-        "set.mm",
-        "iset.mm",
-        "hol.mm",
-        "miu.mm",
-        "nf.mm",
-        "peano.mm",
-        "ql.mm",
-        "big-unifier.mm"]
-
+    const handleCloseAlert = () => {
+        setErrorStatus("");
+    };
     return <div>
-        <h3 className="bp4-heading">Standard DBs</h3>
-        master branch of https://github.com/metamath/set.mm <br />
-        {filenames.map(filename =>
-            <Button
-                key={filename}
-                intent="primary"
-                text={filename}
-                onClick={() => handleClickLoad(filename)}
-            />
-        )}
-
-        {isLoading ? <Spinner /> : null}
-        
-
-        {status}
+        {isLoading ? <div><Spinner /> <br />verifying proofs in DB</div> : null}
+        <Alert
+            isOpen={errorStatus !== ""}
+            confirmButtonText="OK"
+            canOutsideClickCancel={true}
+            onClose={handleCloseAlert}
+        >
+            <p>
+                Couldn't open DB. {errorStatus}
+            </p>
+        </Alert>
+        {isModeTop ? <MPTopMode selectDb={handleSelectDb} /> : null}
+        {isModeDb ? <MPDbMode dbSummary={dbSummary} onClickBack={handleBack} /> : null}
     </div>;
+
+    const minorDbs = [
+        {
+            name: "hol.mm",
+            desc: "Higher Order Logic"
+        },
+        {
+            name: "iset.mm",
+            desc: "Intuitionistic Set Theory"
+        },
+        {
+            name: "nf.mm",
+            desc: "New Foundation"
+        }
+    ];
 }
 
 ReactDOM.createRoot(document.querySelector("#app")!).render(
