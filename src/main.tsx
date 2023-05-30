@@ -5,7 +5,7 @@ import '@blueprintjs/core/lib/css/blueprint.css';
 import * as React from 'react';
 import { useState } from 'react';
 import * as ReactDOM from "react-dom/client";
-import { Button, Spinner, Card, Elevation, Alert } from "@blueprintjs/core";
+import { Tabs, Tab, Button, Spinner, Card, Elevation, Alert } from "@blueprintjs/core";
 
 
 import { parseMM } from "./parser";
@@ -24,8 +24,9 @@ function MPTopMode(props: any) {
     return <div>
         <h2>Pickaxe</h2>
         <div className="bp4-text-large">
-            <p>Metamath is ...</p>
-            <p>Pickaxe is ...</p>
+            <p><a href="https://us.metamath.org/">Metamath</a> is a tiny language that can express theorems in
+                abstract mathematics, accompanied by proofs that can be verified by a computer program. </p>
+            <p>Pickaxe is an unofficial web-based proof assistant.</p>
         </div>
         <div className="bp4-text-muted">
             all data is saved in your browser locally.
@@ -56,8 +57,30 @@ function MPDbMode(props: any) {
     const [dbName, setDbName] = useState("set.mm");
     return <div>
         <h3 onClick={props.onClickBack}>Pickaxe | {dbName} </h3>
-        {props.dbSummary.text}
+        <div style={{ display: "flex" }}>
+            <div style={{ flex: "20", display: "flex" }}>
+                <Tabs vertical={true} large={true}>
+                    <Tab style={{ width: "35px", height: "35px" }} id="db" icon="database" panel={<MPNavigatorDb dbSummary={props.dbSummary} />} />
+                    <Tab style={{ width: "35px", height: "35px" }} id="search" icon="search" panel={<MPNavigatorSearch />} />
+                </Tabs>
+            </div>
+            <div style={{ flex: "80" }}>
+                Workspace Area
+            </div>
+        </div>
     </div>
+}
+
+function MPNavigatorDb(props: any) {
+    return <div>
+        {props.dbSummary.text}
+    </div>;
+}
+
+function MPNavigatorSearch() {
+    return <div>
+        search here
+    </div>;
 }
 
 function MPApp() {
